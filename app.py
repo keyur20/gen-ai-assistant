@@ -6,6 +6,9 @@ import io
 from docx import Document
 from pptx import Presentation
 import textwrap
+from gtts import gTTS
+import os
+import tempfile
 
 # Initialize Cohere client
 COHERE_API_KEY = 'l3VRlgNFDQDd0qEz2SK0PmmLyv5KvY49lF8ExMIB'
@@ -31,10 +34,18 @@ def extract_text_and_images_from_pdf(file):
         page = pdf_document.load_page(page_num)
         for img_index, img in enumerate(page.get_images(full=True)):
             base_image = fitz.Pixmap(pdf_document, img[0])
-            if base_image.n < 5:  # this is a GRAYSCALE or RGB image
-                img_data = base_image.tobytes("png")
-                pil_image = Image.open(io.BytesIO(img_data))
-                # images_text += pytesseract.image_to_string(pil_image)
+            if base_image.n < 5:  # GRAYSCALE or RGB image
+                try:
+                    img_data = base_image.tobytes("png")
+                    pil_image = Image.open(io.BytesIO(img_data))
+                    # images_text += pytesseract.image_to_string(pil_image)
+                except ValueError:
+                    # Unsupported color space, skip the image
+                    continue
+            else:
+                # Handle CMYK or other color spaces if needed
+                # For now, skip these images
+                continue
 
     return text, images_text
 
@@ -101,6 +112,13 @@ def generate_additional_context(context):
     
     return " ".join(additional_contexts)
 
+# Convert text to speech and save to a temporary file
+def text_to_speech(text):
+    tts = gTTS(text, lang='en')
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+    tts.save(temp_file.name)
+    return temp_file.name
+
 def main():
     st.title("Document Summarizer and Q&A")
 
@@ -135,12 +153,21 @@ def main():
         combined_text = text + " " + images_text
 
         if combined_text:
-            st.subheader("Extracted Text")
-            st.write(combined_text)
+            show_text = st.checkbox("Show Document Text", value=False)
 
-            st.subheader("Summarized Text")
-            summary = summarize_text(combined_text)
-            st.write(summary)
+            if show_text:
+                st.subheader("Extracted Text")
+                st.write(combined_text)
+
+            if st.button("Summarize Text"):
+                st.subheader("Summarized Text")
+                summary = summarize_text(combined_text)
+                st.write(summary)
+
+                # Generate and play speech for the summary
+                if summary:
+                    audio_file = text_to_speech(summary)
+                    st.audio(audio_file)
 
             st.subheader("Ask a Question")
             question = st.text_input("Enter your question:")
@@ -152,6 +179,11 @@ def main():
                 full_context = combined_text + " " + additional_context
                 answer = answer_question(question, full_context)
                 st.write(answer)
+
+                # Generate and play speech for the answer
+                if answer:
+                    audio_file = text_to_speech(answer)
+                    st.audio(audio_file)
         else:
             st.error("Could not extract text from the uploaded file.")
 
