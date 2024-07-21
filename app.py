@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz  # PyMuPDF for PDF handling
+from PyMuPDF import fitz  # PyMuPDF for PDF handling
 import cohere
 from PIL import Image
 import io
